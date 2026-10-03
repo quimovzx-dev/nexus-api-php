@@ -1,0 +1,25 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: sqlite3, pdo_sqlite
+      - run: php -l public/index.php
+      - name: API smoke test
+        shell: bash
+        run: |
+          php -S 127.0.0.1:8080 -t public >/tmp/nexus.log 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          sleep 1
+          curl --fail http://127.0.0.1:8080/health
+          curl --fail -X POST http://127.0.0.1:8080/register -H 'Content-Type: application/json' -d '{"name":"CI","email":"ci@example.com","password":"ci-password-123"}'
+          TOKEN=$(curl --fail -s -X POST http://127.0.0.1:8080/login -H 'Content-Type: application/json' -d '{"email":"ci@example.com","password":"ci-password-123"}' | php -r '$d=json_decode(stream_get_contents(STDIN),true); echo $d["token"];')
+          curl --fail -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8080/me
